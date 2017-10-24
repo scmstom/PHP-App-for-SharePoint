@@ -4,11 +4,12 @@
 
 namespace League\OAuth2\Client\Provider;
 
-use League\OAuth2\Client\Entity\User;
+//use League\OAuth2\Client\Entity\User;
+use GuzzleHttp\Psr7\Request;
 use League\OAuth2\Client\Token\AccessToken;
 
 // Class that implements the AbstractProvider class and methods
-class SharePoint extends AbstractProvider
+class SharePoint extends GenericProvider
 {
     public $scopes = array('refresh_token');
     public $responseType = 'json';
@@ -23,8 +24,7 @@ class SharePoint extends AbstractProvider
     	$host = parse_url($options['SPSiteUrl'], PHP_URL_HOST);
     	// Validate that parse_url at least could parse the SPSiteUrl parameter
     	if(!$host){
-    		throw new DomainException('The SPSiteUrl parameter' .
-    				' is not a valid URI');
+    		throw new ConfigException('The SPSiteUrl parameter is not a valid URI');
     	}
     	$this->spsite = $options['SPSiteUrl'];
     	
@@ -42,8 +42,7 @@ class SharePoint extends AbstractProvider
     	$jsonObj = json_decode($json);
     	
     	if($jsonObj === null){
-    		throw new DomainException('The SPAppToken parameter is ' .
-    				' not a base64 JSON string');
+    		throw new ConfigException('The SPAppToken parameter is not a base64 JSON string');
     	}
     	
     	$appCtx = json_decode($jsonObj->appctx);
@@ -68,7 +67,10 @@ class SharePoint extends AbstractProvider
 		}
 		$options['clientId'] = $clientId;
 		$options['resource'] = $this->resource;
-		
+		$options['urlAuthorize'] = $this->urlAuthorize();
+		$options['urlAccessToken'] = $this->urlAccessToken();
+		$options['urlResourceOwnerDetails'] = $this->urlUserDetails();
+
 		parent::__construct($options);
     }
     
@@ -88,7 +90,7 @@ class SharePoint extends AbstractProvider
     // when the app is launched from the Site contents page.
     public function urlAuthorize()
     {
-        return 'https://login.windows.net/'. $tenantId .'/oauth2/authorize';
+        return 'https://login.windows.net/'. $this->tenantId .'/oauth2/authorize';
     }
 
     // Get the token service uri
@@ -102,7 +104,7 @@ class SharePoint extends AbstractProvider
     // with the AbstractProvider class.
     // The function returns the REST endpoint to 
     // get information about the current user.
-    public function urlUserDetails(AccessToken $token)
+    public function urlUserDetails()
     {
     	// Return the REST endpoint for information about 
     	// the current user
@@ -117,24 +119,20 @@ class SharePoint extends AbstractProvider
     {
     	//Prepare and send the http request
         $client = $this->getHttpClient();
-        $request = $client->createRequest('GET', $this->urlUserDetails($token));
-        $request->setHeader('Authorization', 'Bearer ' . $token->accessToken);
-    	$request->setHeader('Accept', 'application/json;odata=verbose');
+        $request = new Request('GET', $this->urlUserDetails($token));
+        $request->withHeader('Authorization', 'Bearer ' . $token->getToken());
+    	$request->withHeader('Accept', 'application/json;odata=verbose');
     	$response = $client->send($request);
         
         //Decode the response using the JSON decoder
-        $output = $response->getBody(true);
+        $output = $response->getBody();
         $jsonResult = json_decode($output);
 
         $user = new User;
-
-        // Populate the user object
-        $user->exchangeArray(array(
-            'uid' => $jsonResult->d->UserId->NameId,
-            'name' => $jsonResult->d->Title,
-            'email' => $jsonResult->d->Email,
-            'urls' => $jsonResult->d->__metadata->uri,
-        ));
+        $user->setUid($jsonResult->d->UserId->NameId);
+        $user->setName($jsonResult->d->UserId->Title);
+        $user->setEmail($jsonResult->d->UserId->Email);
+        $user->setUrls($jsonResult->d->__metadata->uri);
 
         return $user;
     }

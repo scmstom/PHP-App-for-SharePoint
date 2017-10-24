@@ -1,6 +1,6 @@
 {
     "require": {
-        "league/oauth2-client": "~0.3"
+        "league/oauth2-client": "2.2.1"
     },
     "autoload": {
         "files": ["SharePoint.php"]

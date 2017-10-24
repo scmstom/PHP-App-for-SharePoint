@@ -33,7 +33,7 @@ else {
     }
     catch(Exception $exception){
         echo '<p>An exception occurred creating the SharePoint provider: ' . 
-             $e->getMessage().'</p>'; 		
+             $ex->getMessage().'</p>';
         exit;
     }
 
@@ -60,33 +60,37 @@ else {
     	// We have an access token.
     	// In production scenarios, save the access token in an appropriate
     	// storage mechanism so you can use it during the user's session. 
-    	echo 'Access token: ', '<br />', $accessToken->accessToken, '<p />';
+    	echo 'Access token: ', '<br />', $accessToken->getToken(), '<p />';
     	
     	//This is the REST endpoint that we are sending our request to
-    	$apiUrl = $_POST['SPSiteUrl'] . '/_api/web/title';
+    	$apiUrl = $_POST['SPSiteUrl'] . '/_api/web/CurrentUser';
     	
     	// Using guzzle to create an http client
     	// pass the access token in the Authorization header
-    	$client = new Guzzle\Service\Client();
-    	$request = $client->createRequest('GET', $apiUrl);
-    	$request->setHeader('Authorization', 'Bearer ' . $accessToken->accessToken);
-    	$request->setHeader('Accept', 'application/json;odata=verbose');
-    	$response = $client->send($request);
 
-    	//Decode the response using the JSON decoder
-    	$output = $response->getBody(true);
-    	$jsonResult = json_decode($output);
-    	
-    	if($jsonResult->d != null){
+        $opts = [
+            'headers' => [
+                'Accept' => 'application/json;odata=verbose',
+                'Content-Type' => 'application/json'
+            ]
+        ];
+        $req = $provider->getAuthenticatedRequest('GET', $apiUrl, $accessToken, $opts);
+        $resp = $provider->getResponse($req);
+        $txt = $resp->getBody();
+        $json = json_decode($txt);
+//        $txt = json_encode($json);
+//        echo  '#' . $txt . '#';
+
+    	if($json->d != null){
     		// Print the result to the page
     	 	echo '<p>Querying the REST endpoint ', $apiUrl , '<br/>';
-    	   	echo 'Result: ' , $jsonResult->d->Title , '</p>';
+    	   	echo 'Result: ' , $json->d->Title , ', ', $json->d->Email , '</p>';
     	}
     	else{
     	  	// There was a problem with the request
     	   	echo '<p>There was a problem querying the REST endpoint '. $apiUrl . '<br/>';
-    	   	echo 'Error code: ' . $jsonResult->error->code . '<br/>';
-    	   	echo 'Error message: '. $jsonResult->error->message->value . '</p>';
+    	   	echo 'Error code: ' . $json->error->code . '<br/>';
+    	   	echo 'Error message: '. $json->error->message->value . '</p>';
     	}
     }
     catch(Exception $exception){
